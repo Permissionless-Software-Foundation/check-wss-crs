@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+
+<!--
+  This HTML creates a web page that loads an IPFS node. You can interact with it by opening a browser console and interacting
+with the 'node' variable.
+-->
+
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <title>IPFS in the Browser</title>
+  <link rel="icon favicon" href="favicon.ico" />
+</head>
+
+<body>
+  <h1>IPFS in the Browser</h1>
+  <p>
+    This page creates an IPFS node in your browser and drops it into the
+    global Javascript namespace as
+    <b><em style="background-color:#d7d6d6">node</em></b>. Open the console to play around with it.
+  </p>
+  <p>
+    Note that opening two tabs of this page in the same browser won't work
+    well, because they will share node configuration. You'll end up trying to
+    run two instances of the same node, with the same private key and
+    identity, which is a Bad Idea.
+  </p>
+  <h1 id="status">Node status: offline</h1>
+
+  <h2>Some suggestions</h2>
+
+  <p>Try adding a new file:</p>
+
+  <code style="display:block; white-space:pre-wrap; background-color:#d7d6d6">
+      async function addFile () { const { cid } = await node.add('Hello world!')
+      console.log('successfully stored', cid) } addFile()
+    </code>
+
+  <p>
+    You can cat that same file. If you used the exact same string as above
+    ('Hello world!') you should have an hash like this:
+    'QmQzCQn4puG4qu8PVysxZmscmQ5vT1ZXpqo7f58Uh9QfyY'
+  </p>
+
+  <code style="display:block; white-space:pre-wrap; background-color:#d7d6d6">
+      async function catFile () { for await (const data of
+      node.cat('QmQzCQn4puG4qu8PVysxZmscmQ5vT1ZXpqo7f58Uh9QfyY')) {
+      console.log(data.toString()) } } catFile()
+    </code>
+
+  <h2 id="wss-status">WSS Servers Status.</h2>
+
+</body>
+
+<script src="https://cdn.jsdelivr.net/npm/ipfs/dist/index.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+<script>
+  document.addEventListener("DOMContentLoaded", async () => {
+    const insertAfter = (referenceNode, newNode) => {
+      referenceNode.parentNode.insertBefore(
+        newNode,
+        referenceNode.nextSibling
+      );
+    };
+
+    const node = await Ipfs.create({ repo: "ipfs-" + Math.random() });
+    window.node = node;
+
+    const status = node.isOnline() ? "online" : "offline";
+    const id = await node.id();
+
+    console.log(`Node status: ${status}`);
+
+    const statusDOM = document.getElementById("status");
+    statusDOM.innerHTML = `Node status: ${status}`;
+
+    const newDiv = document.createElement("div");
+    newDiv.id = "node";
+    const newContent = document.createTextNode(`ID: ${id.id}`);
+    newDiv.appendChild(newContent);
+
+    insertAfter(statusDOM, newDiv);
+
+    // Obtains the WSS server list
+    await getNodes()
+
+    // You can write more code here to use it. Use methods like
+    // node.add, node.get. See the API docs here:
+    // https://github.com/ipfs/js-ipfs/tree/master/packages/interface-ipfs-core
+  });
+</script>
+
+<script>
+  async function getNodes() {
+    const insertAfter = (referenceNode, newNode) => {
+      referenceNode.parentNode.insertBefore(
+        newNode,
+        referenceNode.nextSibling
+      );
+    };
+
+    const gistUrl =
+      'https://api.github.com/gists/e818ecdaed6c35075bfc0751bf222258'
+
+    // Fetch list
+    const result = await axios.get(gistUrl)
+
+    const content = result.data.files['psf-circuit-relays.json'].content
+
+    const list = JSON.parse(content)
+    const browserList = list.browser
+    // const nodeList = list.node
+
+    const browserDOM = document.getElementById("wss-status");
+
+    for (let i = 0; i < browserList.length; i++) {
+      const nodeData = browserList[i]
+
+      // Div wrapper
+      const div = document.createElement("div");
+      div.id = "node" + i;
+      const content = document.createTextNode(`- ${nodeData.name}`);
+      div.style.padding = "1em"
+      div.style.borderBottom = "1px solid gray"
+      div.appendChild(content);
+
+      // Status button
+      const btn = document.createElement("button");
+      btn.innerHTML = "Connecting..."
+      btn.id = nodeData.ipfsId
+      btn.style.marginLeft = "1em"
+
+      div.appendChild(btn);
+
+      insertAfter(browserDOM, div);
+    }
+    await ConnectAll(browserList.reverse())
+
+    setInterval(async () => {
+      await ConnectAll(browserList.reverse())
+    }, 60000)
+
+  }
+
+
+</script>
+
+<script>
+  // Tries to connect to the ipfs node to a multi address
+  async function Connect(multiaddr) {
+    try {
+      const node = window.node
+
+      const connected = await node.swarm.connect(multiaddr)
+      return true
+    } catch (error) {
+      return false
+    }
+
+  }
+  // Connects to a list of nodes
+  async function ConnectAll(list) {
+    try {
+      console.log("Try connection")
+      for (let i = 0; i < list.length; i++) {
+        const nodeData = list[i]
+        const isConnected = await Connect(nodeData.multiaddr)
+
+        const btn = document.getElementById(nodeData.ipfsId)
+        btn.innerHTML = isConnected ? "Connected" : "Disconnected"
+        btn.style.background = isConnected ? "green" : "red"
+        btn.style.color = "white"
+      }
+    } catch (error) {
+      console.log("ERROR in ConnectAll()")
+      return false
+    }
+
+  }
+</script>
+
+</html>
+
